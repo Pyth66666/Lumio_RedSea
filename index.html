@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lumio — Electricity Intelligence for Commercial Buildings</title>
+  <meta name="description" content="Lumio reads your existing TNB smart meter, reconstructs where every kilowatt goes, costs the waste in ringgit, and tells you how to stop it. Zero hardware." />
+
+  <!-- Fonts: Space Grotesk (display), Inter (UI), JetBrains Mono (data) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js v4.4.1 (open-source, MIT) — vendored locally, no build step -->
+  <script src="vendor/chart.umd.min.js"></script>
+
+  <link rel="stylesheet" href="src/css/styles.css" />
+  <script>
+    (function () {
+      var s = localStorage.getItem('lumio-theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (s === 'dark' || (!s && prefersDark)) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+</head>
+<body>
+
+  <!-- Status bar  -->
+  <div class="statusbar">
+    <div class="wrap statusbar__row">
+      <span>Menara Lumio · 4,200 m² · Kuala Lumpur</span>
+      <span class="statusbar__live"><i class="dot"></i> <span id="source-badge">Live simulated feed</span></span>
+      <span>Tariff RM 0.74/kWh · 0.601 kg CO₂/kWh</span>
+    </div>
+  </div>
+
+  <!-- Masthead  -->
+  <header class="wrap masthead">
+    <div class="brand">
+      <div class="brand__mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" fill="#04111f"/></svg>
+      </div>
+      <div>
+        <div class="brand__name">Lumio</div>
+        <div class="brand__sub">See the waste · Stop the waste</div>
+      </div>
+    </div>
+    <div class="masthead__end">
+      <nav class="tabs" aria-label="Sections">
+        <button class="tab is-active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="how">How it works</button>
+        <button class="tab" data-tab="data">Data connection</button>
+      </nav>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+        <svg class="icon-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <!-- DASHBOARD -->
+    <section data-panel="dashboard" class="is-active">
+
+      <!-- Hero -->
+      <div class="hero">
+        <div class="hero__waste">
+          <div class="hero__label"><i class="dot" style="background:var(--amber)"></i><span class="eyebrow">Electricity wasted · last 24h</span></div>
+          <div class="hero__big" id="hero-wasted">RM 0</div>
+          <p class="hero__cap">Reconstructed from one meter feed — HVAC running overnight, lights in empty floors, weekend cooling with nobody in. Every leak costed at the live TNB tariff.</p>
+        </div>
+        <aside class="config" aria-label="Building configuration">
+          <div class="config__row"><div class="config__k">Building</div><div class="config__v">Menara Lumio</div></div>
+          <div class="config__row"><div class="config__k">Floor area</div><div class="config__v">4,200 m² <small>· 5 floors</small></div></div>
+          <div class="config__row"><div class="config__k">Estimated baseline</div><div class="config__v" id="kpi-baseline">— kW</div></div>
+          <div class="config__row"><div class="config__k">Peak load (24h)</div><div class="config__v" id="kpi-peak">— kW</div></div>
+          <div class="config__row"><div class="config__k">Data source</div><div class="config__v">TNB main smart meter <small>· zero hardware</small></div></div>
+        </aside>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpis">
+        <div class="kpi"><div class="kpi__k"><i class="tick"></i><span class="eyebrow">Current load</span></div><div class="kpi__v is-blue" id="kpi-load">— kW</div></div>
+        <div class="kpi"><div class="kpi__k"><i class="tick" style="background:var(--teal)"></i><span class="eyebrow">Occupancy</span></div><div class="kpi__v is-teal" id="kpi-occupancy">—%</div></div>
+        <div class="kpi"><div class="kpi__k"><i class="tick" style="background:var(--amber)"></i><span class="eyebrow">Power factor · est</span></div><div class="kpi__v is-amber" id="kpi-pf">—</div></div>
+        <div class="kpi"><div class="kpi__k"><i class="tick"></i><span class="eyebrow">Efficiency index</span></div><div class="kpi__v" id="kpi-efficiency">—</div></div>
+      </div>
+
+      <!-- Feed + alerts -->
+      <div class="cols-2">
+        <div class="panel">
+          <div class="panel__bar">
+            <span class="panel__dots"><i></i><i></i><i></i></span>
+            <span>Live meter feed</span>
+            <span style="margin-left:auto">
+              <span class="seg">
+                <button data-feed="total" class="is-active">Total load</button>
+                <button data-feed="disaggregated">Disaggregated</button>
+              </span>
+            </span>
+          </div>
+          <div class="panel__body"><div class="chart-box"><canvas id="chart-feed"></canvas></div></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>Waste alerts</span></div>
+          <div class="panel__body">
+            <div class="alerts" id="alerts"></div>
+            <div class="alerts-total"><span class="eyebrow">Detected waste</span><b id="alerts-total">RM 0</b></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Breakdown + profile -->
+      <div class="cols-2 cols-2--even">
+        <div class="panel">
+          <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>Load breakdown</span></div>
+          <div class="panel__body">
+            <div class="splits">
+              <div class="split"><div><span class="split__dot is-baseline"></span><span class="split__k">Baseline</span></div><div class="split__v" id="split-baseline">—</div></div>
+              <div class="split"><div><span class="split__dot is-hvac"></span><span class="split__k">HVAC</span></div><div class="split__v" id="split-hvac">—</div></div>
+              <div class="split"><div><span class="split__dot is-lighting"></span><span class="split__k">Lighting</span></div><div class="split__v" id="split-lighting">—</div></div>
+              <div class="split"><div><span class="split__dot is-office"></span><span class="split__k">Office</span></div><div class="split__v" id="split-office">—</div></div>
+            </div>
+            <div class="chart-box chart-box--sm"><canvas id="chart-breakdown"></canvas></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>24-hour profile</span></div>
+          <div class="panel__body"><div class="chart-box chart-box--sm"><canvas id="chart-profile"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- Optimization -->
+      <div class="panel section-mt">
+        <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>Optimization potential</span></div>
+        <div class="panel__body">
+          <table class="tbl">
+            <thead><tr><th>System</th><th style="text-align:right">Current</th><th style="text-align:right">Optimised</th><th style="text-align:right">Saving / month</th><th style="text-align:right">Saving / year</th></tr></thead>
+            <tbody id="opt-rows"></tbody>
+            <tfoot><tr>
+              <td>Total</td>
+              <td class="num" id="opt-total-current"></td>
+              <td class="num" id="opt-total-optimised"></td>
+              <td class="num num--save" id="opt-total-month"></td>
+              <td class="num num--save" id="opt-total-year"></td>
+            </tr></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <!-- Recommendations -->
+      <div class="panel section-mt">
+        <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>Recommended actions · ranked</span></div>
+        <div class="panel__body"><div class="recs" id="recommendations"></div></div>
+      </div>
+
+      <!-- Sustainability + business case -->
+      <div class="cols-2 cols-2--even">
+        <div class="panel">
+          <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>Sustainability</span></div>
+          <div class="panel__body">
+            <div class="stat-row">
+              <div class="stat"><div class="stat__v is-teal" id="sus-kwh">—</div><div class="stat__k">kWh avoided / yr</div></div>
+              <div class="stat"><div class="stat__v is-teal" id="sus-co2">—</div><div class="stat__k">tonnes CO₂ / yr</div></div>
+              <div class="stat"><div class="stat__v is-teal" id="sus-trees">—</div><div class="stat__k">trees-equivalent</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>Business case</span></div>
+          <div class="panel__body">
+            <div class="bc-row">
+              <div class="bc"><span class="eyebrow">Customer saves</span><div class="bc__v is-teal" id="bc-saving">—</div></div>
+              <div class="bc"><span class="eyebrow">Subscription / yr</span><div class="bc__v" id="bc-sub">—</div></div>
+              <div class="bc"><span class="eyebrow">Return</span><div class="bc__v is-amber" id="bc-return">—</div></div>
+              <div class="bc"><span class="eyebrow">Payback</span><div class="bc__v" id="bc-payback">—</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!--  HOW IT WORKS  -->
+    <section data-panel="how">
+      <div class="panel section-mt">
+        <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>Architecture</span></div>
+        <div class="panel__body">
+          <div class="arch">
+            <div class="arch__col">
+              <h4>Existing TNB infrastructure</h4>
+              <div class="flow">
+                <div class="flow__node"><i class="tick"></i>TNB main smart meter</div>
+                <div class="flow__arrow">↓</div>
+                <div class="flow__node"><i class="tick"></i>myTNB · half-hourly interval data</div>
+              </div>
+            </div>
+            <div class="arch__col">
+              <h4>Lumio platform · zero hardware</h4>
+              <div class="flow">
+                <div class="flow__node is-lumio"><i class="tick"></i>Ingestion (sync / CSV / live)</div>
+                <div class="flow__arrow">↓</div>
+                <div class="flow__node is-lumio"><i class="tick"></i>Disaggregation engine</div>
+                <div class="flow__arrow">↓</div>
+                <div class="flow__node is-lumio"><i class="tick"></i>Detect + optimise → dashboard</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cols-2 cols-2--even">
+        <div class="panel">
+          <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>The engine · plain steps</span></div>
+          <div class="panel__body">
+            <div class="steps">
+              <div class="step"><div class="step__n">1</div><div><div class="step__t">Find the baseline</div><div class="step__d">The lowest sustained load between 02:00–05:00 is the always-on floor: servers, security, fridges, standby. Everything above it is discretionary.</div></div></div>
+              <div class="step"><div class="step__n">2</div><div><div class="step__t">Read the calendar, not a sensor</div><div class="step__d">Occupancy comes from the building's known schedule — operating hours, weekends, holidays. No occupancy hardware needed.</div></div></div>
+              <div class="step"><div class="step__n">3</div><div><div class="step__t">Attribute the remainder</div><div class="step__d">Load above baseline splits by time-of-day physics: the cooling curve drives HVAC, dark-hour excess flags lighting, the rest scales with occupancy as office load.</div></div></div>
+              <div class="step"><div class="step__n">4</div><div><div class="step__t">Flag what shouldn't be there</div><div class="step__d">Any HVAC or lighting estimated while the calendar says "empty" is waste — costed instantly at the live TNB tariff.</div></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>The engine · the real formula</span></div>
+          <div class="panel__body">
+<div class="code"><span class="c">inputs: total_kw, timestamp, schedule</span>
+
+baseline   = <span class="k">min</span>(total_kw between 02:00–05:00)
+remainder  = total_kw − baseline
+occ        = schedule(hour, weekday)
+
+<span class="k">if</span> occupied:
+    lighting = remainder × 0.18
+    hvac     = remainder × 0.55
+<span class="k">else</span> (empty by calendar):
+    lighting = remainder × 0.80   <span class="w">← waste</span>
+    hvac     = remainder × 0.70   <span class="w">← waste</span>
+
+office     = remainder − hvac − lighting
+waste_rm   = (hvac + lighting <span class="k">while</span> empty) × tariff</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel section-mt">
+        <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>Three data modes</span></div>
+        <div class="panel__body">
+          <div class="modes">
+            <div class="mode"><div class="mode__tag">Mode A · production target</div><div class="mode__t">myTNB sync</div><div class="mode__d">Link a TNB business account; Lumio pulls half-hourly interval data automatically. Demoed as a mock OAuth handshake.</div></div>
+            <div class="mode"><div class="mode__tag">Mode B · works today</div><div class="mode__t">CSV upload</div><div class="mode__d">Export interval data from myTNB and drop the file in. The whole dashboard rebuilds from real numbers in seconds — proof that no installation is needed.</div></div>
+            <div class="mode"><div class="mode__tag">Mode C · works today</div><div class="mode__t">Live feed</div><div class="mode__d">For buildings with a real-time gateway, readings stream continuously. Labelled honestly as a simulated feed in this demo.</div></div>
+          </div>
+          <div class="note"><strong>Accuracy, stated honestly:</strong> disaggregated estimates are directionally accurate (±10–15%), which is how electricity-only NILM works across the industry — precise enough for waste detection from day one. Buildings wanting lab-grade per-circuit numbers can add optional sub-metering with Lumio Pro: same dashboard, same engine.</div>
+        </div>
+      </div>
+    </section>
+
+    <!--  DATA CONNECTION  -->
+    <section data-panel="data">
+      <div class="cols-2 cols-2--even">
+        <div class="panel">
+          <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>Upload TNB interval data (CSV)</span></div>
+          <div class="panel__body">
+            <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Upload a CSV file">
+              <svg class="dropzone__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16V4m0 0 4 4m-4-4-4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              <div class="dropzone__t">Drop a CSV here, or click to browse</div>
+              <div class="dropzone__d">The dashboard rebuilds from your real numbers in seconds.</div>
+            </div>
+            <input type="file" id="file-input" accept=".csv,text/csv" hidden />
+            <div class="upload-status" id="upload-status"></div>
+            <div class="btn-row">
+              <button class="btn" id="btn-sample-busy">Download sample · busy building</button>
+              <button class="btn" id="btn-sample-clean">Download sample · clean building</button>
+              <button class="btn" id="btn-reset">Reset to live demo</button>
+            </div>
+            <div class="sample-fmt">timestamp,total_kw
+2026-06-20 02:00,26.4
+2026-06-20 02:30,25.9
+2026-06-20 03:00,26.1
+…</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel__bar"><span class="panel__dots"><i></i><i></i><i></i></span><span>Connect myTNB (mock)</span></div>
+          <div class="panel__body">
+            <p class="prose">In production, Lumio links your TNB business account over OAuth and pulls half-hourly interval data automatically — nothing to install, live the same day. This demo runs the handshake as a mock so you can see the flow end to end.</p>
+            <div class="btn-row"><button class="btn btn--primary" id="btn-mytnb">Connect myTNB</button></div>
+            <div class="note" style="margin-top:18px"><strong>Why this matters:</strong> 4.5M+ smart meters are already installed across Malaysia, sending half-hourly data to myTNB. Lumio is the intelligence layer that's missing — no hardware, no installation, live the same day.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <span>Lumio · ImagineHack 2026 · Track 3 — Smarter Resource Management</span>
+      <span>Tariff RM 0.74/kWh · Carbon 0.601 kg CO₂/kWh</span>
+    </footer>
+  </main>
+
+  <script type="module" src="src/js/main.js"></script>
+  <script>
+    document.getElementById('theme-toggle').addEventListener('click', function () {
+      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      if (isDark) {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('lumio-theme', 'light');
+      } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('lumio-theme', 'dark');
+      }
+    });
+  </script>
+</body>
+</html>

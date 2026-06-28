@@ -3,10 +3,13 @@
 > **See the waste. Stop the waste.**
 > Zero hardware. Reads the TNB smart meter you already have.
 
-**ImagineHack 2026 · Track 3 — DoubleDot: Smarter Resource Management**
 
 ---
+## Slides
 
+[View project slides (PDF)](https://drive.google.com/file/d/1PbX2Of25d_D4euHnLV41izBOKY5yBSAb/view?usp=sharing)
+
+---
 ## Project Description
 
 Commercial buildings waste a significant share of their electricity budget on systems running when nobody is there — HVAC cooling empty floors, lights left on overnight, weekend consumption with zero occupancy. Lumio fixes this without installing any hardware.
@@ -20,8 +23,6 @@ Demo building: **Menara Lumio** — a 4,200 m² commercial office in Kuala Lumpu
 ## Team
 
 **Team Name:** Red Sea
-**Track:** Track 3 — DoubleDot: Smarter Resource Management
-**Event:** ImagineHack 2026, Taylor's University
 
 | # | Name | Role |
 |---|---|---|
